@@ -6,7 +6,6 @@ namespace StoneShardSaveCheat.Services
 
         private const string _targetDirectory = "exitsave_1";
         private const int _maxBackups = 10;
-        //private const string _restoredMarkerFile = ".restored";
 
         private readonly string _charDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -107,18 +106,6 @@ namespace StoneShardSaveCheat.Services
                     return;
                 }
 
-                //var marker = GetRestoredBackupMarker(sourcePath);
-
-                //if (marker is not null)
-                //{
-                //    LogSkippingBackupOfRestoredDirectory(sourcePath);
-
-                //    // Remove the marker file so it won't prevent future backups after the user modifies it
-                //    File.Delete(marker);
-
-                //    return;
-                //}
-
                 var updatedBackupPath = GetBackupDirectories()
                     .FirstOrDefault(x => x.Contains(_saveId.Current.ToString()));
 
@@ -173,11 +160,6 @@ namespace StoneShardSaveCheat.Services
 
                 LogRestoringLatestBackup(latestBackup, targetPath);
 
-                // Create marker file before restoring to prevent backing up during the restoration
-                //Directory.CreateDirectory(targetPath);
-                //var markerFile = Path.Combine(targetPath, _restoredMarkerFile);
-                //File.Create(markerFile).Dispose();
-
                 CopyDirectory(latestBackup, targetPath);
 
                 LogRestoreSuccessful(latestBackup);
@@ -227,13 +209,6 @@ namespace StoneShardSaveCheat.Services
         private IEnumerable<string> GetBackupDirectories()
             => Directory.GetDirectories(_localBackupFolder)
             .Where(d => Path.GetFileName(d).StartsWith(_targetDirectory));
-
-        //private static string? GetRestoredBackupMarker(string sourcePath)
-        //    => Path.Combine(sourcePath, _restoredMarkerFile) switch
-        //    {
-        //        var existing when File.Exists(existing) => existing,
-        //        _ => null
-        //    };
 
         private static void CopyDirectory(string sourceDir, string destDir)
         {
