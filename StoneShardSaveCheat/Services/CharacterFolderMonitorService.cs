@@ -11,7 +11,7 @@ namespace StoneShardSaveCheat.Services
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "StoneShard",
             "characters_v1",
-            "character_3"
+            "character_4"
         );
         private readonly string _localBackupFolder = "backups";
 
@@ -29,7 +29,6 @@ namespace StoneShardSaveCheat.Services
                     return Task.CompletedTask;
                 }
 
-                // Ensure backup folder exists
                 Directory.CreateDirectory(_localBackupFolder);
 
                 LogPerformingInitialBackup(_targetDirectory);
@@ -93,7 +92,7 @@ namespace StoneShardSaveCheat.Services
         {
             var exception = e.GetException();
 
-            LogFileSystemWatcherError(exception!);
+            LogFileSystemWatcherError(exception);
         }
 
         private void BackupDirectory(string sourcePath)
@@ -217,10 +216,8 @@ namespace StoneShardSaveCheat.Services
             if (!dir.Exists)
                 throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
 
-            // Create the destination directory
             Directory.CreateDirectory(destDir);
 
-            // Copy files
             foreach (var file in dir.GetFiles())
             {
                 var targetFilePath = Path.Combine(destDir, file.Name);
@@ -228,7 +225,6 @@ namespace StoneShardSaveCheat.Services
                 file.CopyTo(targetFilePath, true);
             }
 
-            // Copy subdirectories
             foreach (var subDir in dir.GetDirectories())
             {
                 var targetSubDir = Path.Combine(destDir, subDir.Name);
