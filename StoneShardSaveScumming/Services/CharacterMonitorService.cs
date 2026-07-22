@@ -1,41 +1,59 @@
+using StoneShardSaveScumming.Domain.Context.Backups;
+using StoneShardSaveScumming.Domain.Context.Game;
+
 namespace StoneShardSaveCheat.Services
 {
-    public partial class CharacterFolderMonitorService(ILogger<CharacterFolderMonitorService> logger) : BackgroundService
+    public partial class CharacterMonitorService(ILogger<CharacterMonitorService> logger) : BackgroundService
     {
+        private static readonly CharacterDirectory _charDirectory = new(Number: 4);
+        private static readonly ExitSaveDirectory _exitSaveDirectory = new(_charDirectory);
+
+        private readonly BackupOptions _backupOptions = new();
+        private readonly BackupsStorageDirectory _backupsDirectory = new();
+
         private FileSystemWatcher _fsWatcher = default!;
-
-        private const string _targetDirectory = "exitsave_1";
-        private const int _maxBackups = 10;
-
-        private readonly string _charDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "StoneShard",
-            "characters_v1",
-            "character_4"
-        );
-        private readonly string _localBackupFolder = "backups";
-
-        private (Guid Prev, Guid Current) _saveId = (Guid.Empty, Guid.NewGuid());
+        private SaveId _saveId = new();
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            LogStartingMonitor(_charDirectory);
+            GameDirectory monitorDirectory = _exitSaveDirectory;
+
+            var monitorDirectoryPath = monitorDirectory.PathLocal;
+            var characterDirectoryPath = monitorDirectory.GetCharacter()?.PathLocal ?? string.Empty;
+
+            LogStartingMonitor(monitorDirectoryPath);
 
             try
             {
-                if (!Directory.Exists(_charDirectory))
+                if (!Directory.Exists(characterDirectoryPath))
                 {
-                    LogCharacterFolderNotFound(_charDirectory);
+                    LogCharacterFolderNotFound(characterDirectoryPath);
                     return Task.CompletedTask;
                 }
 
-                Directory.CreateDirectory(_localBackupFolder);
+                DoInitialBackup();
+                StartCharacterMonitor();
 
-                LogPerformingInitialBackup(_targetDirectory);
+                LogMonitorStartedSuccessfully(monitorDirectoryPath);
+            }
+            catch (Exception ex)
+            {
+                LogErrorStartingMonitor(ex);
+            }
 
-                BackupDirectory(Path.Combine(_charDirectory, _targetDirectory));
+            return Task.CompletedTask;
 
-                _fsWatcher = new FileSystemWatcher(_charDirectory)
+            void DoInitialBackup()
+            {
+                Directory.CreateDirectory(_backupsDirectory.PathLocal);
+
+                LogPerformingInitialBackup(monitorDirectoryPath);
+                BackupDirectory(monitorDirectory);
+            }
+
+            void StartCharacterMonitor()
+            {
+                _fsWatcher = new FileSystemWatcher(_charDirectory.PathLocal)
                 {
                     NotifyFilter = NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
                     EnableRaisingEvents = true
@@ -45,24 +63,16 @@ namespace StoneShardSaveCheat.Services
                 _fsWatcher.Changed += OnDirectoryChanged;
                 _fsWatcher.Deleted += OnDirectoryDeleted;
                 _fsWatcher.Error += OnError;
-
-                LogMonitorStartedSuccessfully(_targetDirectory);
             }
-            catch (Exception ex)
-            {
-                LogErrorStartingMonitor(ex);
-            }
-
-            return Task.CompletedTask;
         }
 
         private void OnDirectoryCreated(object sender, FileSystemEventArgs e)
         {
-            if (Path.GetFileName(e.FullPath) == _targetDirectory)
+            if (Path.GetFileName(e.FullPath) == _e)
             {
                 LogTargetDirectoryCreated(e.FullPath);
 
-                _saveId = (_saveId.Current, Guid.NewGuid());
+                _saveId = _saveId.Next();
             }
         }
 
@@ -95,37 +105,29 @@ namespace StoneShardSaveCheat.Services
             LogFileSystemWatcherError(exception);
         }
 
-        private void BackupDirectory(string sourcePath)
+        private void BackupDirectory(GameDirectory directory)
         {
+            var directoryPath = directory.PathLocal;
+
             try
             {
-                if (!Directory.Exists(sourcePath))
+                if (!Directory.Exists(directoryPath))
                 {
-                    LogSourceDirectoryNotFound(sourcePath);
+                    LogSourceDirectoryNotFound(directoryPath);
                     return;
                 }
 
-                var updatedBackupPath = GetBackupDirectories()
-                    .FirstOrDefault(x => x.Contains(_saveId.Current.ToString()));
+                var backupPath = _backupsDirectory.GetBackupLocalPathForSave(directory, _saveId);
 
-                var backupPath = Path.Combine(
-                    _localBackupFolder,
-                    updatedBackupPath is not null
-                        ? Path.GetFileName(updatedBackupPath)
-                        : $"{_targetDirectory}_{_saveId.Current}_{DateTime.Now:yyyy-MM-dd-HH-mm-ss-fff}"
-                );
-
-                LogCopyingToBackup(_targetDirectory, backupPath);
-
-                CopyDirectory(sourcePath, backupPath);
-
-                LogBackupSuccessful(_targetDirectory, backupPath);
+                LogCopyingToBackup(directoryPath, backupPath);
+                CopyDirectory(directoryPath, backupPath);
+                LogBackupSuccessful(directoryPath, backupPath);
 
                 CleanupOldBackups();
             }
             catch (Exception ex)
             {
-                LogErrorBackingUpDirectory(ex, sourcePath);
+                LogErrorBackingUpDirectory(ex, directory);
             }
         }
 
@@ -206,7 +208,7 @@ namespace StoneShardSaveCheat.Services
         }
 
         private IEnumerable<string> GetBackupDirectories()
-            => Directory.GetDirectories(_localBackupFolder)
+            => Directory.GetDirectories(_backupsDirectory.PathLocal)
             .Where(d => Path.GetFileName(d).StartsWith(_targetDirectory));
 
         private static void CopyDirectory(string sourceDir, string destDir)
@@ -246,17 +248,17 @@ namespace StoneShardSaveCheat.Services
             await base.StopAsync(cancellationToken);
         }
 
-        [LoggerMessage(1, LogLevel.Information, "Starting character folder monitor for: {FolderPath}")]
-        private partial void LogStartingMonitor(string folderPath);
+        [LoggerMessage(1, LogLevel.Information, "Starting character folder monitor for: {DirectoryPath}")]
+        private partial void LogStartingMonitor(string directoryPath);
 
-        [LoggerMessage(2, LogLevel.Error, "Character folder does not exist: {FolderPath}")]
-        private partial void LogCharacterFolderNotFound(string folderPath);
+        [LoggerMessage(2, LogLevel.Error, "Character folder does not exist: {DirectoryPath}")]
+        private partial void LogCharacterFolderNotFound(string directoryPath);
 
-        [LoggerMessage(3, LogLevel.Information, "Performing initial backup of '{TargetDirectory}'")]
-        private partial void LogPerformingInitialBackup(string targetDirectory);
+        [LoggerMessage(3, LogLevel.Information, "Performing initial backup: '{TargetDirectoryPath}'")]
+        private partial void LogPerformingInitialBackup(string targetDirectoryPath);
 
-        [LoggerMessage(4, LogLevel.Information, "Character folder monitor started successfully. Watching for '{TargetDirectory}' directory")]
-        private partial void LogMonitorStartedSuccessfully(string targetDirectory);
+        [LoggerMessage(4, LogLevel.Information, "Character folder monitor started successfully. Watching '{TargetDirectoryPath}' directory")]
+        private partial void LogMonitorStartedSuccessfully(string targetDirectoryPath);
 
         [LoggerMessage(5, LogLevel.Error, "Error starting character folder monitor")]
         private partial void LogErrorStartingMonitor(Exception ex);
