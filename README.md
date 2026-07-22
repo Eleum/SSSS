@@ -10,6 +10,7 @@ It watches the exit save directory and creates backups (up to `10`) whenever it 
 
 # Usage
 
+- Build the solution.
 - Ensure `\AppData\Local\StoneShard\characters_v1\character_4` exists.
 - Run the `.exe` file.
 
