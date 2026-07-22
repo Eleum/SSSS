@@ -1,4 +1,4 @@
-﻿namespace StoneShardSaveScumming.Domain.Context.Backups
+﻿namespace StoneShardSaveScumming.Domain.Backups
 {
     public sealed record SaveId
     {

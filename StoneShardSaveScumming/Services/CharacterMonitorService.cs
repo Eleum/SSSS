@@ -1,5 +1,5 @@
-using StoneShardSaveScumming.Domain.Context.Backups;
-using StoneShardSaveScumming.Domain.Context.Game;
+using StoneShardSaveScumming.Domain.Backups;
+using StoneShardSaveScumming.Domain.Game;
 
 namespace StoneShardSaveCheat.Services
 {

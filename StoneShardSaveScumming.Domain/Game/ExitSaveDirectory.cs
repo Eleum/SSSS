@@ -1,4 +1,4 @@
-﻿namespace StoneShardSaveScumming.Domain.Context.Game
+﻿namespace StoneShardSaveScumming.Domain.Game
 {
     public sealed record ExitSaveDirectory : GameDirectory
     {

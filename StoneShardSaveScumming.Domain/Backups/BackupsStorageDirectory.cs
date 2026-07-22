@@ -1,6 +1,6 @@
-﻿using StoneShardSaveScumming.Domain.Context.Game;
+﻿using StoneShardSaveScumming.Domain.Game;
 
-namespace StoneShardSaveScumming.Domain.Context.Backups
+namespace StoneShardSaveScumming.Domain.Backups
 {
     public sealed record BackupsStorageDirectory
     {
