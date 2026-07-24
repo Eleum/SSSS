@@ -16,7 +16,7 @@ It watches the exit save directory and creates backups (up to `10`) whenever it 
 
 # Backups
 
-Backups are stored in the `backups` directory, which is created in the same directory as the executable. Replace the existing `exitsave_1` directory with any of those (keeping the `exitsave_1` name) to be able to load that save file in game.
+Backups are stored in the `backups` directory, which is created in the same directory as the executable. Replace the existing `exitsave_1` directory with any backup you have (keeping the `exitsave_1` name) to be able to load that save file in game.
 
 # Roadmap
 
