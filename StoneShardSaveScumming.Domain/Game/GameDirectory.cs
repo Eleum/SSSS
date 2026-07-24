@@ -3,9 +3,11 @@
     public abstract record GameDirectory
     {
         public abstract string PathLocal { get; }
+    }
 
-        public abstract string Name { get; }
-
-        public override string ToString() => PathLocal;
+    public abstract record GameDirectory<T> : GameDirectory
+        where T : GameDirectoryId
+    {
+        public abstract T Id { get; }
     }
 }

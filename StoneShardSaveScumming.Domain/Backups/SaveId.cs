@@ -12,10 +12,22 @@
         {
         }
 
+        public SaveId(Guid current)
+        {
+            Current = current;
+        }
+
         public SaveId(Guid previous, Guid current)
         {
             Previous = previous;
             Current = current;
         }
+
+        public static SaveId? From(string value)
+            => value switch
+            {
+                var guid when Guid.TryParse(guid, out var parsed) => new SaveId(parsed),
+                _ => null
+            };
     }
 }

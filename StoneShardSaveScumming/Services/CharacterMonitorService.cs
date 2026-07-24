@@ -5,8 +5,10 @@ namespace StoneShardSaveCheat.Services
 {
     public partial class CharacterMonitorService(ILogger<CharacterMonitorService> logger) : BackgroundService
     {
-        private static readonly CharacterDirectory _charDirectory = new(Number: 4);
+        private static readonly CharacterDirectory _charDirectory = new(number: 4);
         private static readonly ExitSaveDirectory _exitSaveDirectory = new(_charDirectory);
+        private static readonly GameDirectory _monitorDirectory = _exitSaveDirectory;
+        private static string MonitorDirectoryName => _monitorDirectory.Id.Value;
 
         private readonly BackupOptions _backupOptions = new();
         private readonly BackupsStorageDirectory _backupsDirectory = new();
@@ -16,10 +18,8 @@ namespace StoneShardSaveCheat.Services
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            GameDirectory monitorDirectory = _exitSaveDirectory;
-
-            var monitorDirectoryPath = monitorDirectory.PathLocal;
-            var characterDirectoryPath = monitorDirectory.GetCharacter()?.PathLocal ?? string.Empty;
+            var characterDirectoryPath = _monitorDirectory.Character?.PathLocal ?? string.Empty;
+            var monitorDirectoryPath = _monitorDirectory.PathLocal;
 
             LogStartingMonitor(monitorDirectoryPath);
 
@@ -39,6 +39,7 @@ namespace StoneShardSaveCheat.Services
             catch (Exception ex)
             {
                 LogErrorStartingMonitor(ex);
+                throw;
             }
 
             return Task.CompletedTask;
@@ -48,7 +49,7 @@ namespace StoneShardSaveCheat.Services
                 Directory.CreateDirectory(_backupsDirectory.PathLocal);
 
                 LogPerformingInitialBackup(monitorDirectoryPath);
-                BackupDirectory(monitorDirectory);
+                BackupDirectory(_monitorDirectory);
             }
 
             void StartCharacterMonitor()
@@ -68,7 +69,7 @@ namespace StoneShardSaveCheat.Services
 
         private void OnDirectoryCreated(object sender, FileSystemEventArgs e)
         {
-            if (Path.GetFileName(e.FullPath) == _e)
+            if (Path.GetFileName(e.FullPath) == MonitorDirectoryName)
             {
                 LogTargetDirectoryCreated(e.FullPath);
 
@@ -78,31 +79,29 @@ namespace StoneShardSaveCheat.Services
 
         private void OnDirectoryChanged(object sender, FileSystemEventArgs e)
         {
-            if (Path.GetFileName(e.FullPath) == _targetDirectory)
+            if (Path.GetFileName(e.FullPath) == MonitorDirectoryName)
             {
                 LogTargetDirectoryChanged(e.FullPath);
 
-                BackupDirectory(e.FullPath);
+                BackupDirectory(_monitorDirectory);
             }
         }
 
         private void OnDirectoryDeleted(object sender, FileSystemEventArgs e)
         {
-            if (Path.GetFileName(e.FullPath) == _targetDirectory)
+            if (Path.GetFileName(e.FullPath) == MonitorDirectoryName)
             {
                 LogTargetDirectoryDeleted(e.FullPath);
 
                 _fsWatcher.EnableRaisingEvents = false;
-                RestoreLatestBackup();
+                RestoreLatestBackup(_monitorDirectory);
                 _fsWatcher.EnableRaisingEvents = true;
             }
         }
 
         private void OnError(object sender, ErrorEventArgs e)
         {
-            var exception = e.GetException();
-
-            LogFileSystemWatcherError(exception);
+            LogFileSystemWatcherError(e.GetException());
         }
 
         private void BackupDirectory(GameDirectory directory)
@@ -117,7 +116,8 @@ namespace StoneShardSaveCheat.Services
                     return;
                 }
 
-                var backupPath = _backupsDirectory.GetBackupLocalPathForSave(directory, _saveId);
+                var backupPath = _backupsDirectory.GetBackupOfSave(directory.Id, _saveId)?.PathLocal 
+                    ?? _backupsDirectory.GetBackupLocalPathForSave(directory.Id, _saveId);
 
                 LogCopyingToBackup(directoryPath, backupPath);
                 CopyDirectory(directoryPath, backupPath);
@@ -127,31 +127,27 @@ namespace StoneShardSaveCheat.Services
             }
             catch (Exception ex)
             {
-                LogErrorBackingUpDirectory(ex, directory);
+                LogErrorBackingUpDirectory(ex, directoryPath);
             }
         }
 
-        private void RestoreLatestBackup()
+        private void RestoreLatestBackup(GameDirectory directory)
         {
             try
             {
-                var targetPath = Path.Combine(_charDirectory, _targetDirectory);
-
-                if (Directory.Exists(targetPath))
+                if (Directory.Exists(directory.PathLocal))
                 {
                     LogRestoreNotRequired();
                     return;
                 }
 
-                if (!Directory.Exists(_localBackupFolder))
+                if (!Directory.Exists(_backupsDirectory.PathLocal))
                 {
                     LogBackupFolderNotFound();
                     return;
                 }
 
-                var latestBackup = GetBackupDirectories()
-                    .OrderByDescending(Directory.GetCreationTime)
-                    .FirstOrDefault();
+                var latestBackup = _backupsDirectory.GetLatestBackupOf(directory.Id);
 
                 if (latestBackup is null)
                 {
@@ -159,11 +155,12 @@ namespace StoneShardSaveCheat.Services
                     return;
                 }
 
-                LogRestoringLatestBackup(latestBackup, targetPath);
+                var backupPath = latestBackup.PathLocal;
+                var targetPath = directory.PathLocal;
 
-                CopyDirectory(latestBackup, targetPath);
-
-                LogRestoreSuccessful(latestBackup);
+                LogRestoringLatestBackup(backupPath, targetPath);
+                CopyDirectory(backupPath, targetPath);
+                LogRestoreSuccessful(backupPath, targetPath);
             }
             catch (Exception ex)
             {
@@ -175,29 +172,31 @@ namespace StoneShardSaveCheat.Services
         {
             try
             {
-                if (!Directory.Exists(_localBackupFolder))
+                if (!Directory.Exists(_backupsDirectory.PathLocal))
                     return;
 
-                var backups = Directory.GetDirectories(_localBackupFolder)
-                    .Where(d => Path.GetFileName(d).StartsWith(_targetDirectory))
-                    .OrderByDescending(Directory.GetCreationTime)
+                var maxBackups = _backupOptions.MaxBackups;
+                var backups = _backupsDirectory.GetAllBackupsOf(_monitorDirectory.Id)
+                    .OrderByDescending(d => d.Created)
                     .ToList();
 
-                if (backups.Count <= _maxBackups)
+                if (maxBackups == int.MaxValue || backups.Count <= maxBackups)
                     return;
 
-                var dirsToDelete = backups.Skip(_maxBackups).ToList();
+                var toDelete = backups.Skip(maxBackups).ToList();
 
-                foreach (var dir in dirsToDelete)
+                foreach (var backup in toDelete)
                 {
+                    var path = backup.PathLocal;
+
                     try
                     {
-                        Directory.Delete(dir, true);
-                        LogDeletedOldBackup(dir);
+                        Directory.Delete(path, recursive: true);
+                        LogDeletedOldBackup(path);
                     }
                     catch (Exception ex)
                     {
-                        LogErrorDeletingOldBackup(ex, dir);
+                        LogErrorDeletingOldBackup(ex, path);
                     }
                 }
             }
@@ -206,10 +205,6 @@ namespace StoneShardSaveCheat.Services
                 LogErrorCleaningupOldBackups(ex);
             }
         }
-
-        private IEnumerable<string> GetBackupDirectories()
-            => Directory.GetDirectories(_backupsDirectory.PathLocal)
-            .Where(d => Path.GetFileName(d).StartsWith(_targetDirectory));
 
         private static void CopyDirectory(string sourceDir, string destDir)
         {
@@ -308,8 +303,8 @@ namespace StoneShardSaveCheat.Services
         [LoggerMessage(20, LogLevel.Debug, "Restoring latest backup from: {BackupPath} to: {TargetPath}")]
         private partial void LogRestoringLatestBackup(string backupPath, string targetPath);
 
-        [LoggerMessage(21, LogLevel.Information, "Successfully restored from backup: {BackupPath}")]
-        private partial void LogRestoreSuccessful(string backupPath);
+        [LoggerMessage(21, LogLevel.Information, "Successfully restored from backup: {BackupPath} to: {TargetPath}")]
+        private partial void LogRestoreSuccessful(string backupPath, string targetPath);
 
         [LoggerMessage(22, LogLevel.Error, "Error restoring latest backup")]
         private partial void LogErrorRestoringLatestBackup(Exception ex);

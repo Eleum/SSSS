@@ -1,16 +1,19 @@
 ﻿namespace StoneShardSaveScumming.Domain.Game
 {
-    public sealed record CharacterDirectory(int Number, int Version = 1) : GameDirectory
+    public sealed record CharacterDirectory : GameDirectory<CharacterDirectoryId>
     {
-        private const string _characterTemplate = "character_{0}";
+        public override CharacterDirectoryId Id { get; }
 
         public override string PathLocal => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "StoneShard",
-            $"characters_v{Version}",
-            Name
+            $"characters_v{Id.Version}",
+            Id.Value
         );
 
-        public override string Name => string.Format(_characterTemplate, Number);
+        public CharacterDirectory(int number)
+        {
+            Id = new CharacterDirectoryId(number);
+        }
     }
 }

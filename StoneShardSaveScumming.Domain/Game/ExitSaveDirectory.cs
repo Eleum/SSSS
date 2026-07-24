@@ -1,27 +1,20 @@
 ﻿namespace StoneShardSaveScumming.Domain.Game
 {
-    public sealed record ExitSaveDirectory : GameDirectory
+    public sealed record ExitSaveDirectory : GameDirectory<ExitSaveDirectoryId>
     {
-        private const string _exitSaveTemplate = "exitsave_{0}";
+        public override ExitSaveDirectoryId Id { get; }
+
+        public override string PathLocal => Path.Combine(Character.PathLocal, Id.Value);
 
         public CharacterDirectory Character { get; }
-
-        public int Number { get; }
-
-        public override string PathLocal => Path.Combine(
-            Character.PathLocal,
-            string.Format(_exitSaveTemplate, Number)
-        );
-
-        public override string Name => string.Format(_exitSaveTemplate, Number);
 
         public ExitSaveDirectory(CharacterDirectory character, int number = 1)
         {
             ArgumentNullException.ThrowIfNull(character, nameof(character));
             ArgumentOutOfRangeException.ThrowIfLessThan(number, 1, nameof(number));
 
+            Id = new ExitSaveDirectoryId(number);
             Character = character;
-            Number = number;
         }
     }
 }
