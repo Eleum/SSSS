@@ -1,23 +1,46 @@
+using Microsoft.Extensions.Options;
+using StoneShardSaveScumming.Config;
 using StoneShardSaveScumming.Domain.Backups;
 using StoneShardSaveScumming.Domain.Game;
 
 namespace StoneShardSaveCheat.Services
 {
-    public partial class CharacterMonitorService(ILogger<CharacterMonitorService> logger) : BackgroundService
+    public partial class CharacterMonitorService : BackgroundService
     {
-        private static readonly CharacterDirectory _charDirectory = new(number: 4);
-        private static readonly ExitSaveDirectory _exitSaveDirectory = new(_charDirectory);
-        private static readonly GameDirectory _monitorDirectory = _exitSaveDirectory;
-        private static string MonitorDirectoryName => _monitorDirectory.Id.Value;
+        private readonly ILogger<CharacterMonitorService> _logger;
+        private readonly IOptionsMonitor<SettingsConfig> _settings;
 
         private readonly BackupOptions _backupOptions = new();
         private readonly BackupsStorageDirectory _backupsDirectory = new();
 
+        private GameDirectory _monitorDirectory = default!;
+        private string MonitorDirectoryName => _monitorDirectory.Id.Value;
+
         private FileSystemWatcher _fsWatcher = default!;
         private SaveId _saveId = new();
 
+        public CharacterMonitorService(ILogger<CharacterMonitorService> logger, IOptionsMonitor<SettingsConfig> settings)
+        {
+            _logger = logger;
+            _settings = settings;
+
+            settings.OnChange(async config =>
+            {
+                if (_monitorDirectory.Character.Id.Number == config.CharacterNumber)
+                    return;
+
+                await StopAsync(default).ConfigureAwait(false);
+
+                _saveId = _saveId.Next();
+
+                await ExecuteAsync(default).ConfigureAwait(false);
+            });
+        }
+
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            InitializeDirectories();
+
             var characterDirectoryPath = _monitorDirectory.Character?.PathLocal ?? string.Empty;
             var monitorDirectoryPath = _monitorDirectory.PathLocal;
 
@@ -54,7 +77,7 @@ namespace StoneShardSaveCheat.Services
 
             void StartCharacterMonitor()
             {
-                _fsWatcher = new FileSystemWatcher(_charDirectory.PathLocal)
+                _fsWatcher = new FileSystemWatcher(_monitorDirectory.PathLocal)
                 {
                     NotifyFilter = NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
                     EnableRaisingEvents = true
@@ -65,6 +88,16 @@ namespace StoneShardSaveCheat.Services
                 _fsWatcher.Deleted += OnDirectoryDeleted;
                 _fsWatcher.Error += OnError;
             }
+        }
+
+        private void InitializeDirectories()
+        {
+            var number = _settings.CurrentValue.CharacterNumber;
+
+            var charDirectory = new CharacterDirectory(number);
+            var exitSaveDirectory = new ExitSaveDirectory(charDirectory);
+
+            _monitorDirectory = exitSaveDirectory;
         }
 
         private void OnDirectoryCreated(object sender, FileSystemEventArgs e)
@@ -116,7 +149,7 @@ namespace StoneShardSaveCheat.Services
                     return;
                 }
 
-                var backupPath = _backupsDirectory.GetBackupOfSave(directory.Id, _saveId)?.PathLocal 
+                var backupPath = _backupsDirectory.GetBackupOfSave(directory.Id, _saveId)?.PathLocal
                     ?? _backupsDirectory.GetBackupLocalPathForSave(directory.Id, _saveId);
 
                 LogCopyingToBackup(directoryPath, backupPath);

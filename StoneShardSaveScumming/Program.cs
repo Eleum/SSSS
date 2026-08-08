@@ -1,4 +1,5 @@
 using StoneShardSaveCheat.Services;
+using StoneShardSaveScumming.Config;
 
 namespace StoneShardSaveScumming
 {
@@ -14,24 +15,17 @@ namespace StoneShardSaveScumming
                 o.TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff ";
             });
 
-            // Add services to the container.
-            builder.Services.AddAuthorization();
-            builder.Services.AddHostedService<CharacterMonitorService>();
+            builder.Services.Configure<SettingsConfig>(builder.Configuration.GetSection(SettingsConfig.SectionKey));
 
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-            //builder.Services.AddOpenApi();
+            // Add services to the container.
+            builder.Services.AddHostedService<CharacterMonitorService>();
 
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
-                //app.MapOpenApi();
             }
-
-            app.UseHttpsRedirection();
-
-            app.UseAuthorization();
 
             app.MapGet("/hi", () => "Hi :)");
 

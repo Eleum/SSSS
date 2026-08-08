@@ -24,7 +24,7 @@ namespace StoneShardSaveScumming.Domain.Game
                 _ => throw new UnreachableException()
             };
 
-            public CharacterDirectory? Character => directory switch
+            public CharacterDirectory Character => directory switch
             {
                 CharacterDirectory characterDirectory => characterDirectory,
                 ExitSaveDirectory exitSaveDirectory => exitSaveDirectory.Character,
